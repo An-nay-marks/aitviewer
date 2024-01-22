@@ -4,7 +4,10 @@ import shutil
 
 import numpy as np
 from PIL import Image
-from pxr import Gf, Sdf, UsdGeom, UsdShade
+try:
+    from pxr import Gf, Sdf, UsdGeom, UsdShade
+except:
+    print("Could not import pxr. This is not a problem if you are not using USD.")
 
 
 def _get_texture_paths(path, name, directory):

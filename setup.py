@@ -25,7 +25,7 @@ requirements = [
     "scikit-video",
     "Pillow",
     "websockets",
-    "usd-core>=23.5",
+    # "usd-core>=23.5",
 ]
 
 # Choose PyQt version depending on environment variable.
@@ -57,6 +57,6 @@ setup(
         "visualization",
     ],
     platforms=["any"],
-    python_requires=">=3.7,<3.11",
+    python_requires=">=3.7",
     install_requires=requirements,
 )

@@ -1774,7 +1774,10 @@ class Viewer(moderngl_window.WindowConfig):
         self._last_frame_rendered_at = self.timer.time
 
     def export_usd(self, path: str, export_as_directory=False, verbose=False, ascii=False):
-        from pxr import Usd, UsdGeom
+        try:
+            from pxr import Usd, UsdGeom
+        except ImportError:
+            print("Could not import pxr. This is not a problem if you are not using USD.")
 
         extension = ".usd" if not ascii else ".usda"
         if export_as_directory:

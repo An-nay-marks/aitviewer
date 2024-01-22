@@ -11,7 +11,10 @@ from aitviewer.shaders import (
     get_outline_program,
     get_sphere_instanced_program,
 )
-from aitviewer.utils import usd
+try:
+    from aitviewer.utils import usd
+except:
+    print("Failed to import usd")
 from aitviewer.utils.decorators import hooked
 from aitviewer.utils.utils import set_lights_in_program, set_material_properties
 

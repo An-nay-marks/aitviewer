@@ -2,7 +2,10 @@
 from functools import lru_cache
 
 import numpy as np
-from pxr import Gf, UsdGeom, UsdLux
+try:
+    from pxr import Gf, UsdLux, UsdGeom
+except ImportError:
+    print("Could not import pxr. This is not a problem if you are not using USD.")
 
 from aitviewer.renderables.lines import Lines
 from aitviewer.renderables.rigid_bodies import RigidBodies

@@ -7,7 +7,10 @@ import cv2
 import moderngl
 import numpy as np
 from moderngl_window.opengl.vao import VAO
-from pxr import Gf, Sdf, UsdGeom
+try:
+    from pxr import Gf, Sdf, UsdGeom
+except ImportError:
+    print("Could not import pxr. This is not a problem if you are not using USD.")
 from trimesh.triangles import points_to_barycentric
 
 from aitviewer.scene.camera import Camera, OpenCVCamera
@@ -17,7 +20,10 @@ from aitviewer.shaders import (
     get_outline_program,
     get_screen_texture_program,
 )
-from aitviewer.utils import usd
+try:
+    from aitviewer.utils import usd
+except:
+    print("Failed to import usd")
 from aitviewer.utils.decorators import hooked
 
 

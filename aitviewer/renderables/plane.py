@@ -1,8 +1,10 @@
 # Copyright (C) 2023  ETH Zurich, Manuel Kaufmann, Velko Vechev, Dario Mylonopoulos
 import moderngl
 import numpy as np
-from pxr import Gf, UsdGeom
-
+try:
+    from pxr import Gf, UsdGeom
+except ImportError:
+    print("Could not import pxr. This is not a problem if you are not using USD.")
 from aitviewer.renderables.meshes import Meshes
 from aitviewer.scene.node import Node
 from aitviewer.shaders import get_chessboard_program, get_smooth_lit_with_edges_program

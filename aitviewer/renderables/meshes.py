@@ -12,7 +12,10 @@ import trimesh.geometry
 import trimesh.visual
 from moderngl_window.opengl.vao import VAO
 from PIL import Image
-from pxr import Gf, Sdf, UsdGeom
+try:
+    from pxr import Gf, Sdf, UsdGeom
+except ImportError:
+    print("Could not import pxr. This is not a problem if you are not using USD.")
 from trimesh.triangles import points_to_barycentric
 
 from aitviewer.scene.node import Node
