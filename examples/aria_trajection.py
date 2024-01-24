@@ -27,24 +27,26 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     
     parser.add_argument('-C', '-closed_trajectory', type=bool, required=False, default=True, help="True if closed-loop trajectory should be visualized. If False, open-loop trajectory is used.")
-    parser.add_argument('-D', '-data_source', type=str, required=False, default="/Users/annel/Documents/Github Repositories/aria_ait/data", help="Path to where the all MPS folders are stored")
-    parser.add_argument('-M', '-mps_folder', type=str, required=False, default="Profile2durationSlam_Trajectory", help="MPS folder name inside data_source path. Make sure to move the vrs Files into the folder")
+    parser.add_argument('-T', '-trajectory_folder_path', type=str, required=False, default="/Users/annel/Documents/Github Repositories/aria_ait/data/Profile2durationSlam_Trajectory", help="MPS folder name inside data_source path. Make sure to move the vrs Files into the folder")
     parser.add_argument('-F', '-frame_rate', type=int, required=False, default=60, help="Frame Rate to sample all data")
-    parser.add_argument('-R', '-load_into_ram', type=bool, required=False, default=False, help="Load all images for display into ram (True) or load images frame-wise during rendering (False)")
-    # TODO: add option to choose where vrs data is stored
+    parser.add_argument('-V', '-vrs_file-path', type=str, required=False, help="VRS file path. If not given, the script will look for a vrs file in the MPS folder.")
     args, _ = parser.parse_known_args()
     args = dict(map(lambda arg: (arg, getattr(args, arg)), vars(args)))
     
     # Path convention
-    vrs_file_name = args["M"][0:-11] + ".vrs"
-    folder_name = os.path.join(args["D"], args["M"])
-    
-    vrs_file_path = os.path.join(folder_name, vrs_file_name)
-    open_loop_trajectory_path = os.path.join(folder_name, "open_loop_trajectory.csv")
-    closed_loop_trajectory_path = os.path.join(folder_name, "closed_loop_trajectory.csv")
-    calibration_path = os.path.join(folder_name, "online_calibration.jsonl")
-    semidense_pointcloud_path = os.path.join(folder_name, "semidense_points.csv.gz")
-    semidense_observation_path = os.path.join(folder_name, "semidense_observations.csv.gz")
+    if args["V"] is not None:
+        vrs_file_path = args["V"]
+    else:
+        vrs_files = []
+        vrs_files += [each for each in os.listdir(args["T"]) if each.endswith('.vrs')]
+        if len(vrs_files) == 0:
+            raise FileNotFoundError("No vrs file found in the MPS folder. Please specify the path to the vrs file with the -V argument.")
+        vrs_file_path = os.path.join(args["T"], vrs_files[0])
+    open_loop_trajectory_path = os.path.join(args["T"], "open_loop_trajectory.csv")
+    closed_loop_trajectory_path = os.path.join(args["T"], "closed_loop_trajectory.csv")
+    calibration_path = os.path.join(args["T"], "online_calibration.jsonl")
+    semidense_pointcloud_path = os.path.join(args["T"], "semidense_points.csv.gz")
+    semidense_observation_path = os.path.join(args["T"], "semidense_observations.csv.gz")
     
     visualize_images = True
     visualize_pointcloud = True
