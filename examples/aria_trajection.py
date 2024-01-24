@@ -140,7 +140,7 @@ if __name__ == "__main__":
                         sensor_data[sensor_name]["full_calibration"].append(cam_calib)
                         Rt_original = T_world_sensor_matrix[:-1]
                         # permute to match the coordinate system of the viewer
-                        Rt_permuted = Rt_original[:, [2,0,1,3]] # permute cols of R
+                        Rt_permuted = Rt_original[:, [0,2,1,3]] # permute cols of R
                         t_original = Rt_permuted[:, 3].copy()
                         Rt_permuted[:, 3] = np.array([0,0,0]) # permute rows of t
                         sensor_data[sensor_name]["Rt"].append(Rt_permuted) # discard last row (0,0,0,1)
