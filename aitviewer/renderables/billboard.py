@@ -447,7 +447,6 @@ class AriaBillboard(Billboard):
             img = rgb_image[0].to_numpy_array()
             
             img = self.img_process_fn(img, self.current_frame_id)
-            print(img.shape)
             self.texture = self.ctx.texture(
                 (img.shape[1], img.shape[0]),
                 img.shape[2] if len(img.shape) > 2 else 1,
@@ -458,6 +457,9 @@ class AriaBillboard(Billboard):
         self.prog["transparency"] = self.texture_alpha
         self.prog["texture0"].value = 0
         self.texture.use(0)
+        #import matplotlib.pyplot as plt
+        #plt.imshow(self.texture)
+        #plt.show()
 
         mvp = camera.get_view_projection_matrix() @ self.model_matrix
         self.prog["mvp"].write(mvp.T.astype("f4").tobytes())
