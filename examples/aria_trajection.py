@@ -2,7 +2,6 @@
 import numpy as np
 import argparse
 import os
-import datetime
 import projectaria_tools.core.mps as mps
 
 from aitviewer.scene.camera import PinholeCamera
@@ -12,15 +11,11 @@ from aitviewer.renderables.point_clouds import PointClouds
 from aitviewer.renderables.billboard import AriaBillboard
 from aitviewer.configuration import CONFIG as C
 from projectaria_tools.core import data_provider, calibration
-from projectaria_tools.core.stream_id import StreamId
-from projectaria_tools.core.sensor_data import TimeDomain, TimeQueryOptions
 from projectaria_tools.core.mps.utils import (
     bisection_timestamp_search,
     filter_points_from_confidence,
     get_nearest_pose
 )
-from PIL import Image
-from tqdm import tqdm
 
 
 if __name__ == "__main__":
@@ -126,12 +121,12 @@ if __name__ == "__main__":
                     sensor_name = cam_calib.get_label()
                     T_device_sensor = cam_calib.get_transform_device_camera()
                     T_world_sensor = T_world_device @ T_device_sensor
-                    SE3d_sensor_matrix = T_world_sensor.to_matrix()
+                    T_world_sensor_matrix = T_world_sensor.to_matrix()
                     
-                    sensor_position_x_y_z = np.array([SE3d_sensor_matrix[1][3], SE3d_sensor_matrix[2][3], SE3d_sensor_matrix[0][3]])
+                    sensor_position_x_y_z = np.array([T_world_sensor_matrix[1][3], T_world_sensor_matrix[2][3], T_world_sensor_matrix[0][3]])
                     sensor_data[sensor_name]["positions"][relative_timestamp] = sensor_position_x_y_z
                     
-                    sensor_orientation = np.array([SE3d_sensor_matrix[1][0:3], SE3d_sensor_matrix[2][0:3], SE3d_sensor_matrix[0][0:3]])
+                    sensor_orientation = np.array([T_world_sensor_matrix[1][0:3], T_world_sensor_matrix[2][0:3], T_world_sensor_matrix[0][0:3]])
                     sensor_data[sensor_name]["orientations"][relative_timestamp] = sensor_orientation
                     
                     # Save full calibration for projection rgb images into the scene
@@ -146,25 +141,15 @@ if __name__ == "__main__":
                     sensor_name = imu_sensor.get_label()
                     T_device_sensor = imu_sensor.get_transform_device_imu()
                     T_world_sensor = T_world_device @ T_device_sensor
-                    SE3d_sensor_matrix = T_world_sensor.to_matrix()
+                    T_world_sensor_matrix = T_world_sensor.to_matrix()
                     
-                    sensor_position_x_y_z = np.array([SE3d_sensor_matrix[1][3], SE3d_sensor_matrix[2][3], SE3d_sensor_matrix[0][3]])
+                    sensor_position_x_y_z = np.array([T_world_sensor_matrix[1][3], T_world_sensor_matrix[2][3], T_world_sensor_matrix[0][3]])
                     sensor_data[sensor_name]["positions"][relative_timestamp] = sensor_position_x_y_z
                     
-                    sensor_orientation = np.array([SE3d_sensor_matrix[1][0:3], SE3d_sensor_matrix[2][0:3], SE3d_sensor_matrix[0][0:3]])
+                    sensor_orientation = np.array([T_world_sensor_matrix[1][0:3], T_world_sensor_matrix[2][0:3], T_world_sensor_matrix[0][0:3]])
                     sensor_data[sensor_name]["orientations"][relative_timestamp] = sensor_orientation
         else:
             print("WARNING: No camera pose found for timestamp {}. This can lead to weird rendering artefacts, as the default pose is (0,0,0).".format(time_ns))
-            
-    
-    # Get resolution of the RGB images to downsample them
-    if visualize_images and "camera-rgb" in sensor_data.keys():
-        vrs_provider = data_provider.create_vrs_data_provider(vrs_file_path)
-        rgb_stream_id = vrs_provider.get_stream_id_from_label("camera-rgb")
-        original_image_size = sensor_data["camera-rgb"]["full_calibration"][0].get_image_size()
-        resolution = [int(original_image_size[1] / 4), int(original_image_size[0] / 4)] # downsample by factor 4 and switch dimensions as the images are later rotated by 90 degrees
-    else:
-        print("No RGB image available. Check if sensor data available and vrs file exists in the data_source_path folder.")
 
     # Display in viewer, add framerate, as we sample all data in ms-steps depending on user input
     C.update_conf({"playback_fps": args["F"]})
@@ -180,8 +165,6 @@ if __name__ == "__main__":
         v.scene.add(point_cloud)
     
     # TODO: create Glasses renderable class
-    #glasses = PinholeCamera(device_positions_x_y_z, targets, v.window_size[0], v.window_size[1], viewer=v) 
-    #v.scene.add(glasses)
     
     # Add all available sensors to the scene. For RGB Camera, add a camera model and the images additionally
     for sensor in sensor_data.keys():
@@ -193,31 +176,34 @@ if __name__ == "__main__":
             sensor_object = CoordinateSystem(rb_pos = rb_position, rb_ori = rb_orientation, length=0.05, color=(0.3, 0.3, 0.3, 1), icon="\u0086", name=sensor)
             v.scene.add(sensor_object)
         else: # RGB Camera
+            
             # Visualized as a camera object with image projections
             targets = sensor_data["camera-rgb"]["positions"] + sensor_data["camera-rgb"]["orientations"] @ np.array([0,0,1])
             camera_rgb = PinholeCamera(sensor_data["camera-rgb"]["positions"], targets, v.window_size[0], v.window_size[1], viewer=v, fov=145, name=sensor)
             v.scene.add(camera_rgb)
+            
             # Project images into Pinhole Camera
             if visualize_images:
-                from projectaria_tools.core import calibration
-                camera_rgb.update_matrices(width=resolution[0], height=resolution[1])
+                
+                vrs_provider = data_provider.create_vrs_data_provider(vrs_filename = str(vrs_file_path))
+                
+                rgb_stream_id = vrs_provider.get_stream_id_from_label("camera-rgb")
+                original_image_size = sensor_data["camera-rgb"]["full_calibration"][0].get_image_size()
+                camera_rgb.update_matrices(width=original_image_size[1], height=original_image_size[0]) # switch dimensions, as images will be rotated by 90 degrees before rendering
+                
                 # define function to undistort and rotate 90 degrees during rendering
                 def process_image(raw_image, frame_idx):
                     online_calibration = sensor_data["camera-rgb"]["full_calibration"][frame_idx]
                     focal_length = camera_rgb.get_projection_matrix()[0,0]
-                    print(focal_length)
-                    #pinhole = calibration.get_linear_camera_calibration(raw_image.shape[0], raw_image.shape[0], 150.0)
-                    #undistorted_image = calibration.distort_by_calibration(raw_image, pinhole, online_calibration)
-                    processed_image = np.rot90(raw_image, k=3)
+                    pinhole_mps = calibration.get_linear_camera_calibration(raw_image.shape[0], raw_image.shape[0], focal_length)
+                    undistorted_image = calibration.distort_by_calibration(raw_image, pinhole_mps, online_calibration)
+                    processed_image = np.rot90(undistorted_image, k=3)
                     return processed_image
                 
                 # Load each frame during rendering via vrs data provider
-                billboard = AriaBillboard.from_camera_and_distance(vrs_provider, timestamps_ns, camera_rgb, 1.34, resolution[0], resolution[1], np.zeros(len(targets)),
+                billboard = AriaBillboard.from_camera_and_distance(vrs_provider, timestamps_ns, camera_rgb, 1.34, original_image_size[1], original_image_size[0], np.zeros(len(targets)),
                                                             image_process_fn = process_image)
                 billboard.texture_alpha = 0.9
                 v.scene.add(billboard)
-    
-    # Set the camera as the current viewer camera.
-    # v.set_temp_camera(glasses)
 
     v.run()
