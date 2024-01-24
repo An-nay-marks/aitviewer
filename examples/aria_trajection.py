@@ -9,7 +9,7 @@ from aitviewer.scene.camera import PinholeCamera
 from aitviewer.viewer import Viewer
 from aitviewer.renderables.coordinate_system import CoordinateSystem
 from aitviewer.renderables.point_clouds import PointClouds
-from aitviewer.renderables.billboard import Billboard
+from aitviewer.renderables.billboard import AriaBillboard
 from aitviewer.configuration import CONFIG as C
 from projectaria_tools.core import data_provider, calibration
 from projectaria_tools.core.stream_id import StreamId
@@ -155,23 +155,12 @@ if __name__ == "__main__":
             print("WARNING: No camera pose found for timestamp {}. This can lead to weird rendering artefacts, as the default pose is (0,0,0).".format(time_ns))
             
     
-    # Save RGB image to project into scene (if available)
+    # Get resolution of the RGB images to downsample them
     if visualize_images and "camera-rgb" in sensor_data.keys():
-        image_paths = []
         vrs_provider = data_provider.create_vrs_data_provider(vrs_file_path)
-        projections = []
         rgb_stream_id = vrs_provider.get_stream_id_from_label("camera-rgb")
         original_image_size = sensor_data["camera-rgb"]["full_calibration"][0].get_image_size()
-        resolution = [int(original_image_size[1] / 4), int(original_image_size[0] / 4)] # downsample by factor 4
-        print("Saving RGB images to {}.".format(folder_name))
-        for relative_time, timestamp in enumerate(tqdm(timestamps_ns)):
-            path = os.path.join(folder_name, f'{relative_time}.jpg')
-            image_paths.append(path)
-            if os.path.exists(path) or not args["R"]:
-                continue # skip if image already exists or the images should be loaded into RAM frame-wise during rendering
-            rgb_image =  vrs_provider.get_image_data_by_time_ns(stream_id = rgb_stream_id, time_ns = int(timestamp), time_domain=TimeDomain.DEVICE_TIME, time_query_options = TimeQueryOptions.CLOSEST)
-            rgb_image_downsized = Image.fromarray(rgb_image[0].to_numpy_array()).resize((resolution[0], resolution[1]))
-            rgb_image_downsized.save(path, optimize=True, quality=50)
+        resolution = [int(original_image_size[1] / 4), int(original_image_size[0] / 4)] # downsample by factor 4 and switch dimensions as the images are later rotated by 90 degrees
     else:
         print("No RGB image available. Check if sensor data available and vrs file exists in the data_source_path folder.")
 
@@ -192,9 +181,17 @@ if __name__ == "__main__":
     #glasses = PinholeCamera(device_positions_x_y_z, targets, v.window_size[0], v.window_size[1], viewer=v) 
     #v.scene.add(glasses)
     
+    # Add all available sensors to the scene. For RGB Camera, add a camera model and the images additionally
     for sensor in sensor_data.keys():
-        if sensor == "camera-rgb":
-            # Only the rgb camera is visualized as a camera object with image projections
+        if sensor != "camera-rgb":
+            # visualize all other sensors as coordinate systems
+            rb_position = np.expand_dims(sensor_data[sensor]["positions"], 1)
+            # rb_orientation = rb_ori = np.repeat(np.eye(3)[np.newaxis, :], len(timestamps_ns), axis=0)[:, np.newaxis]
+            rb_orientation = sensor_data["camera-rgb"]["orientations"][:, np.newaxis]
+            sensor_object = CoordinateSystem(rb_pos = rb_position, rb_ori = rb_orientation, length=0.05, color=(0.3, 0.3, 0.3, 1), icon="\u0086", name=sensor)
+            v.scene.add(sensor_object)
+        else: # RGB Camera
+            # Visualized as a camera object with image projections
             targets = sensor_data["camera-rgb"]["positions"] + sensor_data["camera-rgb"]["orientations"] @ np.array([0,0,1])
             camera_rgb = PinholeCamera(sensor_data["camera-rgb"]["positions"], targets, v.window_size[0], v.window_size[1], viewer=v, fov=145, name=sensor)
             v.scene.add(camera_rgb)
@@ -211,25 +208,12 @@ if __name__ == "__main__":
                     #undistorted_image = calibration.distort_by_calibration(raw_image, pinhole, online_calibration)
                     processed_image = np.rot90(raw_image, k=3)
                     return processed_image
-                if args["R"]:
-                    # Load everything into RAM now
-                    billboard = Billboard.from_camera_and_distance(camera_rgb, 1.34, resolution[0], resolution[1], image_paths, img_process_fn = process_image)
-                else:
-                    # Load each frame during rendering via vrs data provider
-                    billboard = Billboard.from_camera_and_distance(camera_rgb, 1.34, resolution[0], resolution[1], np.zeros(len(targets)),
-                                                               image_process_fn = process_image, # rotate 90 degrees
-                                                               vrs_data_provider = vrs_provider, # added via kwargs
-                                                               vrs_timestamps =  timestamps_ns, # added via kwargs
-                                                               vrs_resolution =  resolution) # added via kwargs
-                v.scene.add(billboard)
                 
-        if sensor != "camera-rgb":
-            # visualize all other sensors as coordinate systems
-            rb_position = np.expand_dims(sensor_data[sensor]["positions"], 1)
-            # rb_orientation = rb_ori = np.repeat(np.eye(3)[np.newaxis, :], len(timestamps_ns), axis=0)[:, np.newaxis]
-            rb_orientation = sensor_data["camera-rgb"]["orientations"][:, np.newaxis]
-            sensor_object = CoordinateSystem(rb_pos = rb_position, rb_ori = rb_orientation, length=0.05, color=(0.3, 0.3, 0.3, 1), icon="\u0086", name=sensor)
-            v.scene.add(sensor_object)
+                # Load each frame during rendering via vrs data provider
+                billboard = AriaBillboard.from_camera_and_distance(vrs_provider, timestamps_ns, camera_rgb, 1.34, resolution[0], resolution[1], np.zeros(len(targets)),
+                                                            image_process_fn = process_image)
+                billboard.texture_alpha = 0.9
+                v.scene.add(billboard)
     
     # Set the camera as the current viewer camera.
     # v.set_temp_camera(glasses)

@@ -54,16 +54,6 @@ class Billboard(Node):
         self.position = center
         self.img_process_fn = (lambda img, _: img) if img_process_fn is None else img_process_fn
         self._need_redraw = False
-        
-        # for project aria device vrs data
-        if "vrs_data_provider" in kwargs and "vrs_timestamps" in kwargs:
-            self.data_provider = kwargs["vrs_data_provider"]
-            self.timestamps = kwargs["vrs_timestamps"]
-            del kwargs["vrs_data_provider"]
-            del kwargs["vrs_timestamps"]
-        else:
-            self.data_provider = None
-            self.timestamps = None
 
         # Tile the uv buffer to match the size of the vertices buffer,
         # we do this so that we can use the same vertex array for all draws
@@ -230,18 +220,10 @@ class Billboard(Node):
                 else:
                     img = cv2.cvtColor(cv2.imread(path), cv2.COLOR_BGR2RGB)
             else:
-                if self.data_provider is not None:
-                    # project aria vrs data
-                    from projectaria_tools.core.sensor_data import TimeDomain, TimeQueryOptions
-                    timestamp = self.timestamps[self.current_frame_id]
-                    rgb_stream_id = self.data_provider.get_stream_id_from_label("camera-rgb")
-                    rgb_image =  self.data_provider.get_image_data_by_time_ns(stream_id = rgb_stream_id, time_ns = int(timestamp), time_domain=TimeDomain.DEVICE_TIME, time_query_options = TimeQueryOptions.CLOSEST)
-                    img = rgb_image[0].to_numpy_array()
-                else:
-                    img = self.textures[self.current_frame_id]
-                    if not isinstance(img, np.ndarray):
-                        img = np.asarray(img)
-                    img = img.copy()
+                img = self.textures[self.current_frame_id]
+                if not isinstance(img, np.ndarray):
+                    img = np.asarray(img)
+                img = img.copy()
             
             img = self.img_process_fn(img, self.current_frame_id)
             print(img.shape)
@@ -367,18 +349,26 @@ class Billboard(Node):
 
         self._export_usd_recursively(stage, usd_path, directory, verbose)
 
+
+
 class AriaBillboard(Billboard):
     """Billboard class to load RGB images from VRS data via the Aria data provider 
     It uses the VRS data provider to get the images and timestamps, so the images do not need 
-    to be saved in a file structure, that the normal Billboard class requires
+    to be saved in a file structure, that the normal Billboard class requires.
     """
-    def __init__(self, vertices, textures, img_process_fn=None, icon="\u0096", **kwargs):
+    def __init__(self, vertices, textures, vrs_data_provider, vrs_timestamps_ns, img_process_fn=None, icon="\u0096", **kwargs):
         super().__init__(vertices, textures, img_process_fn, icon, **kwargs)
-    
+
+        # for project aria device vrs data
+        
+        self.data_provider = vrs_data_provider
+        self.timestamps = vrs_timestamps_ns
     
     @classmethod
     def from_camera_and_distance(
         cls,
+        vrs_data_provider,
+        vrs_timestamps_ns,
         camera: Camera,
         distance: float,
         cols: int,
@@ -388,7 +378,7 @@ class AriaBillboard(Billboard):
         **kwargs,
     ):
         """
-        Initialize a Billboard from a camera object, a distance from the camera, the size of the image in
+        Initialize an AriaBillboard from a camera object, a distance from the camera, the size of the image in
         pixels and the set of images. `image_process_fn` can be used to apply a function to each image.
         """
         frames = camera.n_frames
@@ -440,4 +430,38 @@ class AriaBillboard(Billboard):
                     return cv2.undistort(img, camera.current_K, camera.dist_coeffs)
 
                 image_process_fn = undistort
-        return cls(all_corners, textures, image_process_fn, **kwargs)
+        return cls(all_corners, textures, vrs_data_provider,vrs_timestamps_ns,image_process_fn, **kwargs)
+    
+    
+    def render(self, camera, **kwargs):
+        if self.current_frame_id != self._current_texture_id or self._need_redraw:
+            self._need_redraw = False
+            
+            if self.texture:
+                self.texture.release()
+            # project aria vrs data
+            from projectaria_tools.core.sensor_data import TimeDomain, TimeQueryOptions
+            timestamp = self.timestamps[self.current_frame_id]
+            rgb_stream_id = self.data_provider.get_stream_id_from_label("camera-rgb")
+            rgb_image =  self.data_provider.get_image_data_by_time_ns(stream_id = rgb_stream_id, time_ns = int(timestamp), time_domain=TimeDomain.DEVICE_TIME, time_query_options = TimeQueryOptions.CLOSEST)
+            img = rgb_image[0].to_numpy_array()
+            
+            img = self.img_process_fn(img, self.current_frame_id)
+            print(img.shape)
+            self.texture = self.ctx.texture(
+                (img.shape[1], img.shape[0]),
+                img.shape[2] if len(img.shape) > 2 else 1,
+                img.tobytes(),
+            )
+            self._current_texture_id = self.current_frame_id
+
+        self.prog["transparency"] = self.texture_alpha
+        self.prog["texture0"].value = 0
+        self.texture.use(0)
+
+        mvp = camera.get_view_projection_matrix() @ self.model_matrix
+        self.prog["mvp"].write(mvp.T.astype("f4").tobytes())
+
+        # Compute the index of the first vertex to use if we have a sequence of vertices of length > 1
+        first = 4 * self.current_frame_id if self.vertices.shape[0] > 1 else 0
+        self.vao.render(moderngl.TRIANGLE_STRIP, vertices=4, first=first)
