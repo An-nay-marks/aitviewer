@@ -27,6 +27,7 @@ class Node(object):
         gui_material=True,
         enabled_frames=None,
         n_frames=1,
+        **kwargs
     ):
         """
         :param name: Name of the node

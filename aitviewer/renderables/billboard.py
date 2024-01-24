@@ -54,6 +54,16 @@ class Billboard(Node):
         self.position = center
         self.img_process_fn = (lambda img, _: img) if img_process_fn is None else img_process_fn
         self._need_redraw = False
+        
+        # for project aria device vrs data
+        if "vrs_data_provider" in kwargs and "vrs_timestamps" in kwargs:
+            self.data_provider = kwargs["vrs_data_provider"]
+            self.timestamps = kwargs["vrs_timestamps"]
+            del kwargs["vrs_data_provider"]
+            del kwargs["vrs_timestamps"]
+        else:
+            self.data_provider = None
+            self.timestamps = None
 
         # Tile the uv buffer to match the size of the vertices buffer,
         # we do this so that we can use the same vertex array for all draws
@@ -177,7 +187,6 @@ class Billboard(Node):
                     return cv2.undistort(img, camera.current_K, camera.dist_coeffs)
 
                 image_process_fn = undistort
-
         return cls(all_corners, textures, image_process_fn, **kwargs)
 
     # noinspection PyAttributeOutsideInit
@@ -210,7 +219,7 @@ class Billboard(Node):
     def render(self, camera, **kwargs):
         if self.current_frame_id != self._current_texture_id or self._need_redraw:
             self._need_redraw = False
-
+            
             if self.texture:
                 self.texture.release()
 
@@ -221,12 +230,21 @@ class Billboard(Node):
                 else:
                     img = cv2.cvtColor(cv2.imread(path), cv2.COLOR_BGR2RGB)
             else:
-                img = self.textures[self.current_frame_id]
-                if not isinstance(img, np.ndarray):
-                    img = np.asarray(img)
-                img = img.copy()
-
+                if self.data_provider is not None:
+                    # project aria vrs data
+                    from projectaria_tools.core.sensor_data import TimeDomain, TimeQueryOptions
+                    timestamp = self.timestamps[self.current_frame_id]
+                    rgb_stream_id = self.data_provider.get_stream_id_from_label("camera-rgb")
+                    rgb_image =  self.data_provider.get_image_data_by_time_ns(stream_id = rgb_stream_id, time_ns = int(timestamp), time_domain=TimeDomain.DEVICE_TIME, time_query_options = TimeQueryOptions.CLOSEST)
+                    img = rgb_image[0].to_numpy_array()
+                else:
+                    img = self.textures[self.current_frame_id]
+                    if not isinstance(img, np.ndarray):
+                        img = np.asarray(img)
+                    img = img.copy()
+            
             img = self.img_process_fn(img, self.current_frame_id)
+            print(img.shape)
             self.texture = self.ctx.texture(
                 (img.shape[1], img.shape[0]),
                 img.shape[2] if len(img.shape) > 2 else 1,
@@ -348,3 +366,78 @@ class Billboard(Node):
                         usd.add_texture(stage, mesh, usd_path, texture_path)
 
         self._export_usd_recursively(stage, usd_path, directory, verbose)
+
+class AriaBillboard(Billboard):
+    """Billboard class to load RGB images from VRS data via the Aria data provider 
+    It uses the VRS data provider to get the images and timestamps, so the images do not need 
+    to be saved in a file structure, that the normal Billboard class requires
+    """
+    def __init__(self, vertices, textures, img_process_fn=None, icon="\u0096", **kwargs):
+        super().__init__(vertices, textures, img_process_fn, icon, **kwargs)
+    
+    
+    @classmethod
+    def from_camera_and_distance(
+        cls,
+        camera: Camera,
+        distance: float,
+        cols: int,
+        rows: int,
+        textures: Union[List[str], np.ndarray],
+        image_process_fn=None,
+        **kwargs,
+    ):
+        """
+        Initialize a Billboard from a camera object, a distance from the camera, the size of the image in
+        pixels and the set of images. `image_process_fn` can be used to apply a function to each image.
+        """
+        frames = camera.n_frames
+        frame_id = camera.current_frame_id
+
+        all_corners = np.zeros((frames, 4, 3))
+        for i in range(frames):
+            camera.current_frame_id = i
+            camera.update_matrices(cols, rows)
+            V = camera.get_view_matrix()
+            P = camera.get_projection_matrix()
+            ndc_from_world = P @ V
+
+            # Compute z coordinate of a point at the given distance.
+            world_p = camera.position + camera.forward * distance
+            ndc_p = ndc_from_world @ np.append(world_p, 1.0)
+
+            # Perspective division.
+            z = ndc_p[2] / ndc_p[3]
+
+            # NDC of corners at the computed distance.
+            corners = np.array(
+                [
+                    [1, 1, z],
+                    [1, -1, z],
+                    [-1, 1, z],
+                    [-1, -1, z],
+                ]
+            )
+
+            # Transform ndc coordinates to world coordinates.
+            world_from_ndc = np.linalg.inv(ndc_from_world)
+
+            def transform(x):
+                v = world_from_ndc @ np.append(x, 1.0)
+                v = v[:3] / v[3]
+                return v
+
+            corners = np.apply_along_axis(transform, 1, corners)
+
+            all_corners[i] = corners
+
+        camera.current_frame_id = frame_id
+
+        if image_process_fn is None:
+            if isinstance(camera, OpenCVCamera) and (camera.dist_coeffs is not None):
+
+                def undistort(img, current_frame_id):
+                    return cv2.undistort(img, camera.current_K, camera.dist_coeffs)
+
+                image_process_fn = undistort
+        return cls(all_corners, textures, image_process_fn, **kwargs)
