@@ -15,6 +15,7 @@ from aitviewer.scene.camera_utils import (
     normalize,
     orthographic_projection,
     perspective_projection,
+    perspective_projection_from_intrinsics
 )
 from aitviewer.scene.node import Node
 from aitviewer.utils.decorators import hooked
@@ -766,6 +767,18 @@ class PinholeCamera(Camera):
     def update_matrices(self, width, height):
         # Compute projection matrix.
         P = perspective_projection(np.deg2rad(self.fov), width / height, self.near, self.far)
+
+        # Compute view matrix.
+        V = look_at(self.position, self.current_target, self._world_up)
+
+        # Update camera matrices.
+        self.projection_matrix = P.astype("f4")
+        self.view_matrix = V.astype("f4")
+        self.view_projection_matrix = np.matmul(P, V).astype("f4")
+    
+    def update_matrices_known_intrinsics(self, width, height, f_1, f_2, c_1, c_2):
+        # Compute projection matrix.
+        P = perspective_projection_from_intrinsics(self.far, self.near, width, height, f_1, f_2, c_1, c_2)
 
         # Compute view matrix.
         V = look_at(self.position, self.current_target, self._world_up)
