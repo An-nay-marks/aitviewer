@@ -60,18 +60,22 @@ def perspective_projection(fov, aspect_ratio, znear, zfar):
     else:
         P[2][2] = (f + n) / (n - f)
         P[2][3] = (2 * f * n) / (n - f)
-
     return P
 
-def perspective_projection_from_intrinsics(zfar, znear, width, height, f_1, f_2, c_1, c_2):
-    """Returns a perspective projection matrix based on focal length and camera center"""
-    P = np.zeros((4, 4))
-    P[0][0] = 2 * f_1/width
-    P[1][1] = 2 * f_2/height
-    P[0][2] = 2 * c_1/width - 1
-    P[1][2] = 2 * c_2/height - 1
-    f, n = zfar, znear
-    P[2][2] = (f + n) / (n - f)
-    P[3][2] = -1
-    P[2][3] = 2 * f * n / (n - f)
-    return P
+# def perspective_projection_from_intrinsics(zfar, znear, width, height, focal_length):
+#     """Returns a perspective projection matrix based on focal length and camera center"""
+#     P = np.zeros((4, 4))
+#     P[0][0] = 2 * focal_length/width
+#     P[1][1] = 2 * focal_length/height
+#     P[3][2] = -1.0
+    
+#     f, n = zfar, znear
+#     if f is None:
+#         P[2][2] = -1.0
+#         P[2][3] = -2.0 * n
+#     else:
+#         P[2][2] = (f + n) / (n - f)
+#         P[2][3] = 2 * f * n / (n - f)
+#         # P[2][2] = f / (n - f)
+#         # P[2][3] = f * n / (n - f)
+#     return P

@@ -25,7 +25,7 @@ requirements = [
     "scikit-video",
     "Pillow",
     "websockets",
-    # "usd-core>=23.5",
+    "usd-core>=23.5"
 ]
 
 # Choose PyQt version depending on environment variable.

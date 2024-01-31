@@ -776,17 +776,21 @@ class PinholeCamera(Camera):
         self.view_matrix = V.astype("f4")
         self.view_projection_matrix = np.matmul(P, V).astype("f4")
     
-    def update_matrices_known_intrinsics(self, width, height, f_1, f_2, c_1, c_2):
-        # Compute projection matrix.
-        P = perspective_projection_from_intrinsics(self.far, self.near, width, height, f_1, f_2, c_1, c_2)
+    # def update_matrices_known_intrinsics(self, width, height, f=None):
+    #     # Compute projection matrix.
+    #     if f is None:
+    #         f = self.focal_length
+    #     else:
+    #         self.focal_length = f
+    #     P = perspective_projection_from_intrinsics(self.far, self.near, width, height, f)
 
-        # Compute view matrix.
-        V = look_at(self.position, self.current_target, self._world_up)
+    #     # Compute view matrix.
+    #     V = look_at(self.position, self.current_target, self._world_up)
 
-        # Update camera matrices.
-        self.projection_matrix = P.astype("f4")
-        self.view_matrix = V.astype("f4")
-        self.view_projection_matrix = np.matmul(P, V).astype("f4")
+    #     # Update camera matrices.
+    #     self.projection_matrix = P.astype("f4")
+    #     self.view_matrix = V.astype("f4")
+    #     self.view_projection_matrix = np.matmul(P, V).astype("f4")
 
     def to_opencv_camera(self, **kwargs) -> OpenCVCamera:
         """

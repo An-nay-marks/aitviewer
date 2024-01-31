@@ -102,7 +102,7 @@ if __name__ == "__main__":
     device_orientation_x_y_z = np.zeros((len(timestamps_ns), 3, 3))
     # A trajectory is just a list of poses
     for relative_timestamp, time_ns in enumerate(timestamps_ns): # relative_timestamp is the index of the timestamp, describing the time since record-start, rather than the actual timestamp of the device
-        pose = get_nearest_pose(trajectory, time_ns) # ClosedLoopTrajectoryPose or OpenLoopTrajectoryPose object that contains world coordinate frame graphUid
+        pose = get_nearest_pose(trajectory, time_ns) # ClosedLoopTrajectoryPose object that contains world coordinate frame graphUid
         if pose:
             T_world_device = pose.transform_world_device # Sophus::SE3d object
             SE3d_matrix = T_world_device.to_matrix() # 

@@ -13,7 +13,7 @@ except ImportError:
     print("Could not import pxr. This is not a problem if you are not using USD.")
 from trimesh.triangles import points_to_barycentric
 
-from aitviewer.scene.camera import Camera, OpenCVCamera
+from aitviewer.scene.camera import Camera, OpenCVCamera, PinholeCamera
 from aitviewer.scene.node import Node
 from aitviewer.shaders import (
     get_fragmap_program,
@@ -387,7 +387,11 @@ class AriaBillboard(Billboard):
         all_corners = np.zeros((frames, 4, 3))
         for i in range(frames):
             camera.current_frame_id = i
-            camera.update_matrices(cols, rows)
+            if isinstance(camera, PinholeCamera):
+                # camera.update_matrices_known_intrinsics(width=rows, height=cols)
+                camera.update_matrices(cols, rows)
+            else:
+                camera.update_matrices(cols, rows)
             V = camera.get_view_matrix()
             P = camera.get_projection_matrix()
             ndc_from_world = P @ V
